@@ -1,0 +1,170 @@
+---
+title: "Reproducible Research Project 1"
+author: "YC Hsieh"
+date: "2021/3/27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up environment
+```{r}
+library(readr)
+library(tidyverse)
+```
+
+## Loading and preprocessing the data
+
+Loading the data, into default working directory.
+Previewing the data with `head()`.
+
+```{r Loading data}
+fileURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(fileURL, "./data.zip")
+unzip("./data.zip")
+
+DATA <- read_csv("activity.csv", na = "NA")
+head(DATA)
+```
+
+## What is mean total number of steps taken per day?
+For this part of the assignment, you can ignore the missing values in the dataset.
+
+**1. Calculate the total number of steps taken per day**
+
+```{r}
+library(tidyverse)
+df.sumsteps <- DATA %>% group_by(date) %>% summarize(steps_sum = sum(steps, na.rm = TRUE))
+head(df.sumsteps)
+```
+
+The question did not specify which day it wants to know. The calculation and the result dataframe is shown above.
+
+**2. If you do not understand the difference between a histogram and a barplot, research the difference between them. Make a histogram of the total number of steps taken each day.**
+
+```{r}
+ggplot(data = df.sumsteps, aes(steps_sum)) + 
+  geom_histogram(bins = 20) + 
+  ggtitle("Histogram of steps per day") +
+  xlab("Total steps per day") +
+  ylab("Count") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Note that "0" includes those days with NA data.
+
+**3. Calculate and report the mean and median of the total number of steps taken per day**
+
+```{r}
+summary(df.sumsteps$steps_sum)
+```
+As from the summary above, the mean of the total number of steps taken per day is 9354, and the median is 10395.
+
+## What is the average daily activity pattern?
+
+**1. Make a time series plot (i.e. ``type = "l"``) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis).**
+
+```{r}
+# prepare dataset
+df.avgpattern <- DATA %>% group_by(interval) %>%
+  summarize(avg_steps = mean(steps, na.rm = TRUE))
+head(df.avgpattern)
+```
+```{r}
+# time series plot
+ggplot(data = df.avgpattern, aes(interval, avg_steps)) +
+  geom_line() +
+  ggtitle("Time series plot of the average daily activity pattern") +
+  xlab("Time: 5-minute interval") +
+  ylab("Average steps (across all days)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+```
+
+
+**2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?**
+
+```{r}
+df.avgpattern$interval[which.max(df.avgpattern$avg_steps)]
+```
+The interval "835" contains the maximum number of steps.
+
+## Imputing missing values
+
+**1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with ```NAs```) **
+
+```{r}
+nrow(DATA) - sum(complete.cases(DATA))
+# or sum(is.na(DATA$steps))
+```
+
+The total number of rows with NAs is 2304.
+
+**2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.**
+**3. Create a new dataset that is equal to the original dataset but with the missing data filled in.**
+
+```{r}
+# Identify the rows with NAs
+na.rows <- !complete.cases(DATA)
+# Fetch the mean of that interval from previous dataframe and fill in
+DATA2 <- DATA
+for (i in 1:nrow(DATA)){
+  if (na.rows[i])
+  DATA2$steps[i] <- df.avgpattern$avg_steps[df.avgpattern$interval == DATA2$interval[i]]
+}
+# View filled dataset
+head(DATA2)
+summary(DATA2)
+```
+
+**4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?**
+
+```{r}
+df.sumsteps2 <- DATA2 %>% group_by(date) %>% summarize(steps_sum = sum(steps))
+ggplot(data = df.sumsteps2, aes(steps_sum)) + 
+  geom_histogram(bins = 20) + 
+  ggtitle("Histogram of steps per day") +
+  xlab("Total steps per day") +
+  ylab("Count") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+summary(df.sumsteps2)
+```
+The **mean** total number of steps taken per day is 10766, and the **median** is now 10766.
+The impact of imputing missing data is the decrease of abnormal "0" total steps data.
+The overall "shape" of the histogram has not changed much.
+
+## Are there differences in activity patterns between weekdays and weekends?
+For this part the ```weekdays()``` function may be of some help here. Use the dataset with the filled-in missing values for this part.
+
+**1. Create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.**
+
+```{r}
+Sys.setlocale("LC_TIME", "C")
+DATA3 <- DATA2 %>% mutate(wkd = weekdays(date)) %>%
+  mutate(wknd = fct_collapse(wkd, "weekday" = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"), "weekend" = c("Saturday", "Sunday")))
+str(DATA3$wknd)
+```
+The factor requested is "wknd" as above.
+
+**2. Make a panel plot containing a time series plot (i.e. ```type = "l"```) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.**
+
+```{r}
+df.avgpattern3 <- DATA3 %>% group_by(interval, wknd) %>% summarize(avg_steps = mean(steps, na.rm=TRUE))
+```
+```{r}
+# time series plot
+ggplot(data = df.avgpattern3, aes(interval, avg_steps)) +
+  geom_line() +
+  facet_grid(cols = vars(wknd)) +
+  ggtitle("Time series plot of the average daily activity pattern") +
+  xlab("Time: 5-minute interval") +
+  ylab("Average steps (across all matched days)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
